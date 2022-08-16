@@ -1,0 +1,513 @@
+#include <stdio.h>
+#include <string.h>
+#include <sqlca.h>
+#include <stdlib.h>
+#include <sqlda.h>
+#include <sqlcpr.h>
+
+#define UNAME_LEN      20 
+#define PWD_LEN        11
+#define STR_LEN        25
+
+typedef char asciiz[STR_LEN]; 
+
+EXEC SQL TYPE asciiz IS CHARZ(STR_LEN) REFERENCE; 
+asciiz     username; 
+asciiz     password; 
+
+struct serviceDetails
+{
+    asciiz serviceName;
+    float servicePrice;
+    //asciiz serviceType;
+};
+
+struct posBalance
+{
+    
+    asciiz CID;
+    asciiz fName;
+    asciiz lName;
+    asciiz address;
+    asciiz phoneNum;
+    asciiz numOfAccounts;
+    //float balance;
+};
+
+struct specialRequests
+{
+    asciiz serviceName;
+    asciiz requestName;
+    //asciiz serviceType;
+    //asciiz dateFrom;
+};
+
+struct paymentSixMonths
+{
+    asciiz PID;
+    asciiz AID;
+    asciiz pDate;
+    asciiz paymentMethod;
+};
+
+struct recServiceInfo
+{
+    asciiz SID;
+    asciiz serviceName;
+    asciiz requestName;
+    asciiz dateFrom;
+    asciiz dateTo;
+};
+
+struct totalAmount
+{
+    float totalBalance;
+};
+
+struct unusualDetails
+{
+    asciiz unusualFee;
+    float feeAmount;
+    asciiz unusualCredit;
+    float creditAmount;
+    asciiz billingDate;
+};
+
+struct billingInfo
+{
+    asciiz billingDate;
+    float balance;
+    asciiz dueDate;
+};
+
+struct moreThanOneAccount
+{
+    asciiz fName;
+    asciiz lName;
+    asciiz numOfAccounts;
+};
+
+struct totalPaymentMarch
+{
+    float balance;
+};
+
+void sql_error(msg)char *msg;
+{ 
+    char err_msg[512];
+    size_t buf_len, msg_len;
+
+    EXEC SQL WHENEVER SQLERROR CONTINUE;
+
+    printf("\n%s\n", msg);
+
+    /* Call sqlglm() to get the complete text of the
+     * error message.
+     */
+
+    buf_len = sizeof (err_msg);
+    sqlglm(err_msg, &buf_len, &msg_len);
+    printf("%.*s\n", msg_len, err_msg);
+
+    EXEC SQL ROLLBACK RELEASE;
+    exit(EXIT_FAILURE);
+} 
+
+void serviceDetails()
+{
+    struct serviceDetails *serviceDetails_rec_ptr; 
+
+    if ((serviceDetails_rec_ptr = (struct serviceDetails *) malloc(sizeof(struct serviceDetails))) == 0)
+    { 
+        fprintf(stderr, "Memory allocation error.\n"); 
+        exit(EXIT_FAILURE); 
+    } 
+    
+    EXEC SQL DECLARE query1_cursor CURSOR FOR 
+        SELECT serviceName, servicePrice FROM Service WHERE serviceType = 'Standard' or serviceType = 'Special';
+
+    EXEC SQL OPEN query1_cursor; 
+
+    printf("\n\nDetails of the standard services and special services offered by the company and their prices:\n\n");
+    printf("serviceName              servicePrice\n"); 
+    printf("-----------              ------------\n"); 
+
+    EXEC SQL WHENEVER NOT FOUND DO break; 
+
+    while(1)
+    { 
+        EXEC SQL FETCH query1_cursor INTO :serviceDetails_rec_ptr; 
+        printf("%s %.2f\n", serviceDetails_rec_ptr->serviceName, serviceDetails_rec_ptr->servicePrice); 
+    } 
+
+    EXEC SQL CLOSE query1_cursor;
+}
+
+void posBalance()
+{
+    struct posBalance *posBalance_rec_ptr; 
+
+    if ((posBalance_rec_ptr = (struct posBalance *) malloc(sizeof(struct posBalance))) == 0)
+    { 
+        fprintf(stderr, "Memory allocation error.\n"); 
+        exit(EXIT_FAILURE); 
+    } 
+    
+    EXEC SQL DECLARE query2_cursor CURSOR FOR 
+        SELECT * FROM Customer WHERE CID IN (SELECT CID FROM Billing WHERE balance > 0);
+
+    EXEC SQL OPEN query2_cursor; 
+
+    printf("\n\nDetails of the customers who have a positive balance currently in the system:\n\n");
+    printf("CID                      fName                    lName                    address                  phoneNum                 numOfAccounts\n"); 
+    printf("--------                 ---------                ---------                --------                 ----------               -------------\n"); 
+
+    EXEC SQL WHENEVER NOT FOUND DO break; 
+
+    while(1)
+    { 
+        EXEC SQL FETCH query2_cursor INTO :posBalance_rec_ptr; 
+        printf("%s %s %s %s %s %s\n", posBalance_rec_ptr->CID, posBalance_rec_ptr->fName, posBalance_rec_ptr->lName, posBalance_rec_ptr->address, posBalance_rec_ptr-> phoneNum,
+                posBalance_rec_ptr->numOfAccounts); 
+    } 
+
+    EXEC SQL CLOSE query2_cursor;
+}
+
+void specialRequests(char * id[])
+{
+    struct specialRequests *sr_rec_ptr; 
+
+    if ((sr_rec_ptr = (struct specialRequests *) malloc(sizeof(struct specialRequests))) == 0)
+    { 
+        fprintf(stderr, "Memory allocation error.\n"); 
+        exit(EXIT_FAILURE); 
+    } 
+
+    EXEC SQL DECLARE query3_cursor CURSOR FOR 
+        SELECT serviceName, requestName FROM Request WHERE serviceType LIKE '%Special%' AND dateFrom BETWEEN '01-APR-22' AND '07-APR-22' AND AID LIKE :id;
+
+    EXEC SQL OPEN query3_cursor; 
+
+    printf("\n\nList of all the special service requests made by AID '%s' between April 1, 2022 and April 7, 2022:\n\n", id);
+    printf("serviceName              requestName\n"); 
+    printf("-----------              -----------\n"); 
+
+    EXEC SQL WHENEVER NOT FOUND DO break; 
+
+    while(1)
+    { 
+        EXEC SQL FETCH query3_cursor INTO :sr_rec_ptr; 
+        printf("%s %s\n", sr_rec_ptr->serviceName, sr_rec_ptr->requestName); 
+    } 
+
+    EXEC SQL CLOSE query3_cursor;
+}
+
+void paymentSixMonths(char * id[])
+{
+    struct paymentSixMonths *psm_rec_ptr; 
+
+    if ((psm_rec_ptr = (struct paymentSixMonths *) malloc(sizeof(struct paymentSixMonths))) == 0)
+    { 
+        fprintf(stderr, "Memory allocation error.\n"); 
+        exit(EXIT_FAILURE); 
+    } 
+
+    EXEC SQL DECLARE query4_cursor CURSOR FOR 
+        SELECT * FROM Payment WHERE AID LIKE :id AND pDate >= add_months(sysdate, -6);
+
+    EXEC SQL OPEN query4_cursor; 
+
+    printf("\n\nPayment details of AID '%s' for the last six months: \n\n", id);
+    printf("PID                      AID                      pDate                    paymentMethod\n"); 
+    printf("---------                ---------                ------------             -------------\n"); 
+
+    EXEC SQL WHENEVER NOT FOUND DO break; 
+
+    while(1)
+    { 
+        EXEC SQL FETCH query4_cursor INTO :psm_rec_ptr; 
+        printf("%s %s %s %s\n", psm_rec_ptr->PID, psm_rec_ptr->AID, psm_rec_ptr->pDate, psm_rec_ptr->paymentMethod); 
+    } 
+
+    EXEC SQL CLOSE query4_cursor;
+}
+
+void recServiceInfo(char * id[])
+{
+    struct recServiceInfo *rsi_rec_ptr; 
+
+    if ((rsi_rec_ptr = (struct recServiceInfo *) malloc(sizeof(struct recServiceInfo))) == 0)
+    { 
+        fprintf(stderr, "Memory allocation error.\n"); 
+        exit(EXIT_FAILURE); 
+    } 
+
+    EXEC SQL DECLARE query5_cursor CURSOR FOR 
+        SELECT SID, serviceName, requestName, dateFrom, dateTo FROM Request WHERE AID LIKE :id AND recurringCharge LIKE '%Yes%';
+
+    EXEC SQL OPEN query5_cursor; 
+
+    printf("\n\nThe recurring services chosen by a AID '%s' and the date of subscription and termination: \n\n", id);
+    printf("SID                      serviceName              requestName              dateFrom                 dateTo\n"); 
+    printf("---------                ---------                ------------             --------                 ------\n"); 
+
+    EXEC SQL WHENEVER NOT FOUND DO break; 
+
+    while(1)
+    { 
+        EXEC SQL FETCH query5_cursor INTO :rsi_rec_ptr; 
+        printf("%s %s %s %s %s\n", rsi_rec_ptr->SID, rsi_rec_ptr->serviceName, rsi_rec_ptr->requestName, rsi_rec_ptr->dateFrom, rsi_rec_ptr->dateTo); 
+    } 
+
+    EXEC SQL CLOSE query5_cursor;
+}
+
+void totalAmount()
+{
+    struct totalAmount *ta_rec_ptr; 
+
+    if ((ta_rec_ptr = (struct totalAmount *) malloc(sizeof(struct totalAmount))) == 0)
+    { 
+        fprintf(stderr, "Memory allocation error.\n"); 
+        exit(EXIT_FAILURE); 
+    } 
+
+    EXEC SQL DECLARE query6_cursor CURSOR FOR 
+        SELECT SUM(balance) FROM Billing;
+
+    EXEC SQL OPEN query6_cursor; 
+
+    printf("\n\nThe total amount of the balance for all the customer accounts in the company:\n\n");
+    printf("totalBalance\n"); 
+    printf("------------\n"); 
+
+    EXEC SQL WHENEVER NOT FOUND DO break; 
+
+    while(1)
+    { 
+        EXEC SQL FETCH query6_cursor INTO :ta_rec_ptr; 
+        printf("%.2f\n", ta_rec_ptr->totalBalance); 
+    } 
+
+    EXEC SQL CLOSE query6_cursor;
+}
+
+void unusualDetails(char * id[])
+{
+    struct unusualDetails *ud_rec_ptr; 
+
+    if ((ud_rec_ptr = (struct unusualDetails *) malloc(sizeof(struct unusualDetails))) == 0)
+    { 
+        fprintf(stderr, "Memory allocation error.\n"); 
+        exit(EXIT_FAILURE); 
+    } 
+
+    EXEC SQL DECLARE query7_cursor CURSOR FOR 
+        SELECT unusualFee, feeAmount, unusualCredit, creditAmount, billingDate FROM Billing WHERE AID LIKE :id;
+
+    EXEC SQL OPEN query7_cursor; 
+
+    printf("\n\nThe details of the unusual fees and credits for AID '%s': \n\n", id);
+    printf("unusualFee               feeAmount       unusualCredit            creditAmount   billingDate\n"); 
+    printf("---------                ---------       ------------             ------------   -----------\n"); 
+
+    EXEC SQL WHENEVER NOT FOUND DO break; 
+
+    while(1)
+    { 
+        EXEC SQL FETCH query7_cursor INTO :ud_rec_ptr; 
+        printf("%s %.2f\t\t %s %.2f\t\t %s\n", ud_rec_ptr->unusualFee, ud_rec_ptr->feeAmount, ud_rec_ptr->unusualCredit, ud_rec_ptr->creditAmount, ud_rec_ptr->billingDate); 
+    } 
+
+    EXEC SQL CLOSE query7_cursor;
+}
+
+void billingInfo(char * id[])
+{
+    struct billingInfo *bi_rec_ptr; 
+
+    if ((bi_rec_ptr = (struct billingInfo *) malloc(sizeof(struct billingInfo))) == 0)
+    { 
+        fprintf(stderr, "Memory allocation error.\n"); 
+        exit(EXIT_FAILURE); 
+    } 
+
+    EXEC SQL DECLARE query8_cursor CURSOR FOR 
+        SELECT billingDate, balance, dueDate FROM Billing WHERE AID LIKE :id;
+
+    EXEC SQL OPEN query8_cursor; 
+
+    printf("\n\nThe date of billing, amount, and date due for AID '%s': \n\n", id);
+    printf("billingDate              balance         dueDate\n"); 
+    printf("---------                ---------       -------\n"); 
+
+    EXEC SQL WHENEVER NOT FOUND DO break; 
+
+    while(1)
+    { 
+        EXEC SQL FETCH query8_cursor INTO :bi_rec_ptr; 
+        printf("%s %.2f\t\t %s\n", bi_rec_ptr->billingDate, bi_rec_ptr->balance, bi_rec_ptr->dueDate); 
+    } 
+
+    EXEC SQL CLOSE query8_cursor;
+}
+
+void moreThanOneAccount()
+{
+    struct moreThanOneAccount *mtoa_rec_ptr; 
+
+    if ((mtoa_rec_ptr = (struct moreThanOneAccount *) malloc(sizeof(struct moreThanOneAccount))) == 0)
+    { 
+        fprintf(stderr, "Memory allocation error.\n"); 
+        exit(EXIT_FAILURE); 
+    } 
+
+    EXEC SQL DECLARE query9_cursor CURSOR FOR 
+        SELECT fName, lName, numOfAccounts FROM Customer WHERE numOfAccounts > 1;
+
+    EXEC SQL OPEN query9_cursor; 
+
+    printf("\n\nAll the customers who have more than one account in the company:\n\n");
+    printf("fName                    lName                    numOfAccounts\n"); 
+    printf("-----                    -----                    -------------\n"); 
+
+    EXEC SQL WHENEVER NOT FOUND DO break; 
+
+    while(1)
+    { 
+        EXEC SQL FETCH query9_cursor INTO :mtoa_rec_ptr; 
+        printf("%s %s %s\n", mtoa_rec_ptr->fName, mtoa_rec_ptr->lName, mtoa_rec_ptr->numOfAccounts); 
+    } 
+
+    EXEC SQL CLOSE query9_cursor;
+}
+
+void totalPaymentMarch()
+{
+    struct totalPaymentMarch *tpm_rec_ptr; 
+
+    if ((tpm_rec_ptr = (struct totalPaymentMarch *) malloc(sizeof(struct totalPaymentMarch))) == 0)
+    { 
+        fprintf(stderr, "Memory allocation error.\n"); 
+        exit(EXIT_FAILURE); 
+    } 
+
+    EXEC SQL DECLARE query10_cursor CURSOR FOR 
+        SELECT SUM(balance) FROM Billing WHERE dueDate BETWEEN '01-MAR-22' AND '31-MAR-22';
+
+    EXEC SQL OPEN query10_cursor; 
+
+    printf("\n\nThe total payment received by the company in March 2022:\n\n");
+    printf("totalPayment\n"); 
+    printf("------------\n"); 
+
+    EXEC SQL WHENEVER NOT FOUND DO break; 
+
+    while(1)
+    { 
+        EXEC SQL FETCH query10_cursor INTO :tpm_rec_ptr; 
+        printf("%.2f\n", tpm_rec_ptr->balance); 
+    } 
+
+    EXEC SQL CLOSE query10_cursor;
+}
+
+void main() 
+{   
+    /* Connect to ORACLE. */ 
+        strcpy(username, "bal105"); 
+        strcpy(password, "C12107250"); 
+ 
+    EXEC SQL WHENEVER SQLERROR DO sql_error("ORACLE error--");
+ 
+    EXEC SQL CONNECT :username IDENTIFIED BY :password; 
+    printf("\nConnected to ORACLE as user: %s\n", username); 
+
+    while(1)
+    {
+        printf("\nSelect an option:\n");
+        printf("0. Exit the program\n");
+        printf("1. List the details of the standard services and special services offered by the company and their prices.\n");
+        printf("2. List the details of the customers who have a positive balance currently in the system.\n");
+        printf("3. List all the special service requests made by a customer between April 1, 2022 and April 7, 2022.\n");
+        printf("4. List the payment details of a particular customer for the last six months.\n");
+        printf("5. List the recurring services chosen by a particular customer account and the date of subscription and termination.\n");
+        printf("6. Identify the total amount of the balance for all the customer accounts in the company.\n");
+        printf("7. List the details of the unusual fees and credits for a customer account.\n");
+        printf("8. List the date of billing, amount, and date due for a customer account.\n");
+        printf("9. Identify all the customers who have more than one account in the company.\n");
+        printf("10. Identify the total payment received by the company in March 2022.\n");
+        
+        int input;
+        printf(">> ");
+        scanf("%d", &input);
+
+        char * str[32];
+
+        switch(input)
+        {
+            case 0:
+                printf("Done.\n");
+                EXEC SQL COMMIT WORK RELEASE;
+                exit(EXIT_SUCCESS);
+
+            case 1:
+                serviceDetails();
+                break;
+        
+            case 2:
+                posBalance();
+                break;
+
+            case 3: 
+                printf("\nEnter a customer account ID: ");
+                scanf("%s", &str);
+                specialRequests(str);
+                break;
+
+            case 4:
+                printf("\nEnter a customer account ID: ");
+                scanf("%s", &str);
+                paymentSixMonths(str);
+                break;
+
+            case 5:
+                printf("\nEnter a customer account ID: ");
+                scanf("%s", &str);
+                recServiceInfo(str);
+                break;
+
+            case 6:
+                totalAmount();
+                break;
+
+            case 7:
+                printf("\nEnter a customer account ID: ");
+                scanf("%s", &str);
+                unusualDetails(str);
+                break;
+
+            case 8:
+                printf("\nEnter a customer account ID: ");
+                scanf("%s", &str);
+                billingInfo(str);
+                break;
+
+            case 9:
+                moreThanOneAccount();
+                break;
+
+            case 10:
+                totalPaymentMarch();
+                break;
+
+            default:    
+                printf("Invalid input \"%d\", please try again\n", input);
+                break;
+        }
+    }
+} 
+
+
